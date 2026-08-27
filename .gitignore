@@ -23,17 +23,40 @@ env/
 *.swo
 
 # Models (太大，不提交)
-models/*.bin
-models/*.pt
-models/*.pth
-models/*.safetensors
+models/
 checkpoints/
 
-# Data (可能含敏感信息)
+# Downloads 缓存（不提交）
+downloads/
+
+# Data (可能含敏感信息 / 太大)
 data/*.csv
 data/*.json
 data/*.jsonl
 data/raw/
+data/processed/
+data/CBLUE/
+data/QASystemOnMedicalKG/
+_cmeee_sample.txt
+
+# Office 临时锁文件
+~$*
+
+# 求职作品（不上传 GitHub：简历/面试准备/公司清单/面试知识库）
+resume*.md
+resume*.pdf
+resume*.docx
+docs/
+knowledge-base/
+scripts/resume_ai_app.json
+scripts/build_company_list.py
+
+# 与项目无关的本地工具/脚本
+scripts/save_session_context.py
+scripts/start-edge-debug.bat
+
+# 本地 AI 工作指引（含求职/内部信息，不上传）
+CLAUDE.md
 
 # Environment
 .env

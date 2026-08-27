@@ -1,0 +1,12 @@
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+streamlit>=1.28.0
+neo4j>=5.14.0
+pydantic>=2.5.0
+requests>=2.31.0
+python-multipart>=0.0.6
+
+# 可选：图片 OCR（病历图片上传功能）—— 需要额外安装，体积较大
+# pip install paddlepaddle paddleocr
+# paddlepaddle>=2.5.0
+# paddleocr>=2.7.0

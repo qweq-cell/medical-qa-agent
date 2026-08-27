@@ -1,0 +1,1 @@
+# MedGuardian — 智能病历结构化+质控Agent

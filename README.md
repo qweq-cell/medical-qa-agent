@@ -1,87 +1,140 @@
-# 🏥 MedGuardian — 智能病历结构化+质控Agent
+# 🏥 MedGuardian — 智能病历结构化 + 质控 Agent
 
-> 一个能读懂中文电子病历、自动提取关键医疗信息、并检测临床逻辑矛盾的AI Agent。
+> 输入一份中文电子病历 → AI 自动提取关键医疗实体 → 基于医学知识图谱检测临床逻辑矛盾 → 输出结构化质控报告。
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-开发中-orange.svg)]()
+[![Status](https://img.shields.io/badge/Status-Developing-orange.svg)]()
 
 ---
 
-## 🎯 一句话介绍
+## ✨ 特性
 
-输入一份中文病历文本 → AI自动提取疾病/症状/药品/检查项目 → 基于医学知识图谱检测逻辑矛盾 → 输出结构化质控报告。
+- **多模态输入**：文本病历 + 图片病历（PaddleOCR 识别）
+- **医疗实体识别**：`bert-base-chinese` 微调 NER（F1 0.66~0.77）+ 词典匹配兜底，识别疾病/症状/药品/检查等 9 类实体
+- **知识图谱增强（RAG）**：Neo4j 本地知识图谱（4.4 万节点/28 万关系），实体链接 + 图谱检索增强 LLM 生成
+- **向量检索 RAG**：BGE embedding + chunk 切分 + 余弦相似度检索 + LLM 生成（完整检索增强生成链路）
+- **LLM Agent 深度质控**：DeepSeek API 驱动，发现规则引擎无法识别的临床逻辑问题（症状-性别矛盾、用药-诊断不匹配等）
+- **规则引擎兜底**：性别矛盾/剂量异常/症状匹配/信息完整性四级检测，服务异常自动降级不崩溃
+- **工程化交付**：FastAPI + Streamlit + Docker，接口实测 246ms 响应
 
 ---
 
 ## 🏗 技术架构
 
 ```
-病历文本 → NER实体识别 → 实体链接 → LLM结构化 → 知识图谱验证 → 质控报告
+病历文本 / 图片(OCR)
+  → ① NER 实体识别（BERT 模型 + 词典匹配 + 实体链接）
+  → ② 知识图谱查询（Neo4j：症状/药品/检查/并发症）
+  → ③ LLM Agent 深度质控（DeepSeek）
+  → ④ 规则引擎兜底（性别/剂量/完整性）
+  → ⑤ 质控报告生成（Markdown / 自然语言）
 ```
 
 | 模块 | 技术 |
 |------|------|
-| NER | bert-base-chinese + HuggingFace |
-| 实体链接 | Sentence-BERT 向量匹配 |
-| 信息抽取 | 中文医疗LLM + LoRA微调 |
-| 知识图谱 | Neo4j (1万+医疗三元组) |
+| NER | bert-base-chinese + HuggingFace Token Classification |
+| 实体链接 | 别名映射 + 模糊匹配 |
+| 知识图谱 | Neo4j + Cypher（4.4 万节点 / 28 万关系） |
+| RAG | BGE embedding + 向量检索 + 知识图谱增强 |
+| LLM Agent | DeepSeek API（OpenAI 兼容格式）+ Agent 编排 |
+| OCR | PaddleOCR |
 | 后端 | FastAPI |
 | 前端 | Streamlit |
+| 部署 | Docker |
 
 ---
 
 ## 🚀 快速开始
 
+### 环境要求
+
+- Python 3.10+
+- Neo4j（本地或远程）
+
+### 安装
+
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/YOUR_USERNAME/medical-qa-agent.git
+git clone https://github.com/qweq-cell/medical-qa-agent.git
 cd medical-qa-agent
 
-# 2. 安装依赖
 pip install -r requirements.txt
-
-# 3. 启动Demo
-streamlit run src/app.py
+# 可选：图片识别
+# pip install paddlepaddle paddleocr
 ```
+
+### 配置
+
+1. 启动 Neo4j，导入知识图谱（或配置已有实例）：
+
+```bash
+python scripts/import_medical_kg.py --password <your-neo4j-password>
+```
+
+2. （可选）LLM Agent 模式：在项目根创建 `.env` 填入 DeepSeek API Key：
+
+```
+LLM_API_KEY=sk-xxx
+```
+
+### 运行
+
+```bash
+# 方式一：一键启动（后端 + 前端）
+start-demo.bat
+
+# 方式二：分别启动
+python -m src.main                          # 后端 API (8000)
+streamlit run src/ui/app.py                 # 前端 (8501)
+```
+
+浏览器访问 `http://localhost:8501`，输入病历文本或上传图片，点击「分析」。
+
+### API
+
+| 接口 | 说明 |
+|------|------|
+| `POST /api/analyze` | 分析病历文本，返回结构化质控报告 |
+| `POST /api/analyze_image` | 上传病历图片，OCR 识别后分析 |
+| `GET /api/health` | 健康检查 |
 
 ---
 
 ## 📁 项目结构
 
 ```
-medical-qa-agent/
-├── data/           # 数据集（CHIP、cEHR-Notes等）
-├── models/         # 训练好的NER/LLM模型
-├── src/            # 核心代码
-│   ├── ner/        # NER实体识别
-│   ├── llm/        # LLM信息抽取
-│   ├── kg/         # 知识图谱查询
-│   └── agent/      # Agent调度逻辑
-├── notebooks/      # Jupyter实验笔记
-├── scripts/        # 数据预处理脚本
-├── PROPOSAL.md     # 项目立项文档
-└── README.md
+src/
+├── ner/        # 实体识别（BERT 模型 + 词典匹配 + 实体链接）
+├── kg/         # 知识图谱（Neo4j 连接 + Cypher 查询）
+├── llm/        # LLM Agent（DeepSeek 客户端 + 结构化抽取 + 质控报告）
+├── ocr/        # 图片识别（PaddleOCR）
+├── qc/         # 质控规则引擎 + 报告生成
+├── agent/      # Agent 调度器（ReAct 模式 + 工具调用）
+├── api/        # FastAPI 路由
+├── ui/         # Streamlit 前端
+├── models/     # 数据模型（Pydantic）
+└── main.py     # 应用入口
+scripts/        # 数据导入 / NER 训练 / RAG demo
+models/         # 预训练 + 微调模型权重
+data/           # 数据集（CMeEE / 医疗知识图谱数据）
 ```
 
 ---
 
-## 📅 开发进度
+## 📊 项目里程碑
 
-- [x] **第1周** (7/14-7/20)：Python基础 + 项目立项 ✅
-- [ ] **第2周** (7/21-7/27)：数据集准备 + 知识图谱
-- [ ] **第3周** (7/28-8/3)：医疗NER模型训练
-- [ ] **第4周** (8/4-8/10)：LLM微调 + 病历结构化
-- [ ] **第5周** (8/11-8/17)：Agent核心功能
-- [ ] **第6周** (8/18-8/24)：工程化 + Demo
-- [ ] **第7周** (8/25-8/31)：文档 + 博客 + 简历
+- ✅ 医疗 NER 模型训练（bert-base-chinese 微调，F1 0.66~0.77）
+- ✅ 本地知识图谱构建（44K 节点 / 280K 关系）
+- ✅ LLM Agent 接入（DeepSeek，规则兜底 + 自动降级）
+- ✅ OCR 图片识别 + 向量检索 RAG
+- ✅ FastAPI + Streamlit + Docker 全链路 Demo
 
 ---
 
-## 👤 作者
+## 📄 License
 
-医工交叉方向求职者 | 2026秋招
+[MIT](LICENSE)
 
 ---
 
-> 📅 项目开始：2026年7月14日
+> 📅 项目开始：2026 年 7 月 | 医疗 AI 应用方向个人项目
