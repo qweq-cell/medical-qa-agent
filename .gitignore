@@ -22,8 +22,8 @@ env/
 *.swp
 *.swo
 
-# Models (太大，不提交)
-models/
+# Models (太大，不提交；仅根目录 weights，放行 src/models/ 代码)
+/models/
 checkpoints/
 
 # Downloads 缓存（不提交）
@@ -34,10 +34,13 @@ data/*.csv
 data/*.json
 data/*.jsonl
 data/raw/
-data/processed/
 data/CBLUE/
 data/QASystemOnMedicalKG/
 _cmeee_sample.txt
+
+# 例外：NER 运行时词典（小，让 demo 开箱可用）——只提交这一个文件
+data/processed/*
+!data/processed/medical_entity_dict.json
 
 # Office 临时锁文件
 ~$*
