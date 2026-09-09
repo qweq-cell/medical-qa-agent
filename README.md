@@ -65,17 +65,31 @@ pip install -r requirements.txt
 
 ### 配置
 
-1. 启动 Neo4j，导入知识图谱（或配置已有实例）：
+1. （可选）导入知识图谱，启用 KG 增强（完整复现 44K 节点 / 280K 关系图谱）：
 
-```bash
-python scripts/import_medical_kg.py --password <your-neo4j-password>
-```
+   KG 源数据 `medical.json`（约 45MB，JSONL，8808 条疾病记录）来自第三方开源医疗知识图谱项目
+   [zhihao-chen/QASystemOnMedicalKG](https://github.com/zhihao-chen/QASystemOnMedicalKG)
+   （上游 [liuhuanyong/QABasedOnMedicalKnowledgeGraph](https://github.com/liuhuanyong/QABasedOnMedicalKnowledgeGraph)），
+   因体积较大不随本仓库分发。请先从上述项目（或其 fork）获取构建好的 `medical.json` 放到本仓库：
 
-2. （可选）LLM Agent 模式：在项目根创建 `.env` 填入 DeepSeek API Key：
+   ```
+   data/QASystemOnMedicalKG/data/medical.json
+   ```
 
-```
-LLM_API_KEY=sk-xxx
-```
+   然后启动本地 Neo4j 并执行导入（幂等 MERGE，可重复运行）：
+
+   ```bash
+   pip install neo4j
+   python scripts/import_medical_kg.py --password <your-neo4j-password>
+   ```
+
+   > 未放置该文件也能正常演示：系统自动降级为「无 KG 模式」，词典 NER + 规则质控完整可用。
+
+2. （可选）LLM Agent 深度质控：复制 `.env.example` 为 `.env` 并填入 DeepSeek API Key：
+
+   ```
+   LLM_API_KEY=sk-xxx
+   ```
 
 ### 运行
 
