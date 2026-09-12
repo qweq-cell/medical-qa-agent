@@ -17,6 +17,8 @@
 - **LLM Agent 深度质控**：DeepSeek API 驱动，发现规则引擎无法识别的临床逻辑问题（症状-性别矛盾、用药-诊断不匹配等）
 - **规则引擎兜底**：性别矛盾/剂量异常/症状匹配/信息完整性四级检测，服务异常自动降级不崩溃
 - **工程化交付**：FastAPI + Streamlit + Docker，接口实测 246ms 响应
+- **质控规则评测集**：25 例带已知答案的评测集（18 例含植入问题、共 21 个问题实例 + 7 例干净对照组），输出检出率 / 误报率 / 完全正确数 / 延迟基线；当前 rule-only 模式下检出率 100%、误报 0、对照组 0 误报
+- **MCP Server**：基于 MCP 协议把整体质控能力封装为可调用工具（stdio transport），打通 Agent 与病历 / 知识库数据源；Neo4j 不可达自动降级，任意环境可跑
 
 ---
 
@@ -131,6 +133,8 @@ src/
 scripts/        # 数据导入 / NER 训练 / RAG demo
 models/         # 预训练 + 微调模型权重
 data/           # 数据集（CMeEE / 医疗知识图谱数据）
+eval/           # 质控规则评测集（cases.json + runner + 评测报告）
+mcp-server/     # MCP Server（stdio，把质控能力暴露为 MCP 工具）
 ```
 
 ---
@@ -142,6 +146,8 @@ data/           # 数据集（CMeEE / 医疗知识图谱数据）
 - ✅ LLM Agent 接入（DeepSeek，规则兜底 + 自动降级）
 - ✅ OCR 图片识别 + 向量检索 RAG
 - ✅ FastAPI + Streamlit + Docker 全链路 Demo
+- ✅ 质控规则评测集（25 例 + 对照组 + 自动化 runner，输出 recall / 误报率 / 延迟基线）
+- ✅ MCP Server（stdio transport，质控能力工具化）
 
 ---
 
