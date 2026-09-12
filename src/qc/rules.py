@@ -98,28 +98,23 @@ class QCRules:
         """剂量异常检测"""
         findings = []
 
-        # 常见剂量模式
-        dosage_patterns = [
-            (r'(\d+\.?\d*)\s*m?g\s*(?:tid|bid|qd|一天[一二三]次|每日[一二三]次)', "剂量"),
-            (r'(\d+\.?\d*)\s*ml', "体积"),
-        ]
-
-        # 可疑的高剂量
+        # 可疑的高剂量 / 大体积：独立于给药频次，只要数值超过阈值即提示。
+        # (fix) 原实现把 suspicious_doses 定义后从未执行（死代码），且仅在剂量后紧跟
+        # “每日[一二三]次”等频次词时才检查——导致“2500mg 每日两次”整段漏检。
         suspicious_doses = [
-            (r'(\d{4,})\s*m?g', 1000, "剂量偏高（>1000mg），请确认"),
-            (r'(\d{3,})\s*ml', 100, "单次体积偏大，请确认"),
+            (r'(\d+\.?\d*)\s*m?g', 1000, "mg", "剂量偏高（>1000mg），请确认"),
+            (r'(\d+\.?\d*)\s*ml', 100, "ml", "单次体积偏大，请确认"),
         ]
 
-        for pattern, _ in dosage_patterns:
-            matches = re.findall(pattern, text)
-            for match in matches:
-                val = float(match)
-                if val > 1000:
+        for pattern, threshold, unit, suggestion in suspicious_doses:
+            for match in re.finditer(pattern, text):
+                val = float(match.group(1))
+                if val > threshold:
                     findings.append(QCFinding(
                         type="dosage_abnormal",
                         severity="warning",
-                        description=f"剂量偏高：{match}mg",
-                        suggestion="请确认剂量是否合理",
+                        description=f"剂量偏高：{match.group(1)}{unit}",
+                        suggestion=suggestion,
                     ))
 
         return findings
