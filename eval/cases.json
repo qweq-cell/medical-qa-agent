@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "note": "合成评测集：由 AI 助手编写，用于规则质控的检出率/误报/延迟度量。埋点仅在可被 NER 词典识别的实体上构造（性别矛盾→疾病名；剂量/信息完整→正则）。非真实病历，不代表临床分布。",
+    "mode": "rule-only (无 Neo4j / 无 LLM)",
+    "date": "2026-09-09"
+  },
+  "cases": [
+    {"id": "C1", "title": "clean: 男57 高血压", "expected_types": [], "text": "患者，男，57岁，主诉头晕1周。诊断：高血压病。医嘱：硝苯地平 30mg 每日一次。血压150/95mmHg。"},
+    {"id": "C2", "title": "clean: 女48 糖尿病", "expected_types": [], "text": "患者，女，48岁，主诉口渴多饮。诊断：2型糖尿病。医嘱：二甲双胍 500mg 每日三次。空腹血糖 8.9mmol/L。"},
+    {"id": "C3", "title": "clean: 男61 高血压", "expected_types": [], "text": "患者，男，61岁，主诉头痛。诊断：高血压病。医嘱：氨氯地平 5mg 每日一次。"},
+    {"id": "C4", "title": "clean: 女55 糖尿病", "expected_types": [], "text": "患者，女，55岁，主诉乏力。诊断：2型糖尿病。医嘱：二甲双胍 250mg 每日三次。"},
+    {"id": "C5", "title": "clean: 男59 糖尿病+高血压", "expected_types": [], "text": "患者，男，59岁，主诉夜尿增多。诊断：2型糖尿病、高血压病。医嘱：二甲双胍 500mg 每日三次，氨氯地平 5mg 每日一次。"},
+    {"id": "C6", "title": "clean: 女66 高血压", "expected_types": [], "text": "患者，女，66岁，主诉心悸。诊断：高血压病。医嘱：硝苯地平 30mg 每日一次。"},
+    {"id": "G1", "title": "gender: 男56 + 子宫肌瘤", "expected_types": ["gender_mismatch"], "text": "患者，男，56岁，主诉下腹痛3月。诊断：2型糖尿病、子宫肌瘤。医嘱：二甲双胍 500mg 每日三次。"},
+    {"id": "G2", "title": "gender: 女63 + 前列腺增生", "expected_types": ["gender_mismatch"], "text": "患者，女，63岁，主诉尿频、夜尿增多。诊断：高血压病、前列腺增生。医嘱：硝苯地平 30mg 每日一次。"},
+    {"id": "G3", "title": "gender: 男49 + 卵巢囊肿", "expected_types": ["gender_mismatch"], "text": "患者，男，49岁，主诉腹痛。诊断：卵巢囊肿。医嘱：头孢克肟 200mg 每日两次。"},
+    {"id": "G4", "title": "gender+dosage: 男 + 乳腺增生 + 二甲双胍3000mg", "expected_types": ["gender_mismatch", "dosage_abnormal"], "text": "患者，男，52岁，主诉乳房胀痛。诊断：乳腺增生、2型糖尿病。医嘱：二甲双胍 3000mg 每日一次。"},
+    {"id": "G5", "title": "gender: 男45 + 输卵管炎", "expected_types": ["gender_mismatch"], "text": "患者，男，45岁，主诉下腹坠胀。诊断：输卵管炎。医嘱：头孢拉定 250mg 每日四次。"},
+    {"id": "G6", "title": "gender+missing: 女68 + 前列腺增生 + 无年龄", "expected_types": ["gender_mismatch", "missing_info"], "text": "患者，女，主诉排尿困难。诊断：前列腺增生。医嘱：硝苯地平 30mg 每日一次。"},
+    {"id": "G7", "title": "gender: 男39 + 阴道炎", "expected_types": ["gender_mismatch"], "text": "患者，男，39岁，主诉会阴不适。诊断：阴道炎。医嘱：头孢氨苄 250mg 每日三次。"},
+    {"id": "D1", "title": "dosage: 二甲双胍5000mg", "expected_types": ["dosage_abnormal"], "text": "患者，男，58岁。诊断：2型糖尿病。医嘱：二甲双胍 5000mg 每日一次。空腹血糖 11.2mmol/L。"},
+    {"id": "D2", "title": "dosage: 硝苯地平2000mg", "expected_types": ["dosage_abnormal"], "text": "患者，女，70岁。诊断：高血压病。医嘱：硝苯地平 2000mg 每日一次。"},
+    {"id": "D3", "title": "dosage: 二甲双胍2500mg bid", "expected_types": ["dosage_abnormal"], "text": "患者，女，46岁。诊断：2型糖尿病。医嘱：二甲双胍 2500mg 每日两次。"},
+    {"id": "D4", "title": "dosage: 氨氯地平1500mg", "expected_types": ["dosage_abnormal"], "text": "患者，男，63岁。诊断：高血压病。医嘱：氨氯地平 1500mg 每日一次。"},
+    {"id": "D5", "title": "dosage: 阿司匹林3000mg", "expected_types": ["dosage_abnormal"], "text": "患者，男，67岁。诊断：高血压病。医嘱：阿司匹林 3000mg 每日一次。"},
+    {"id": "D6", "title": "dosage边界: 1000mg 应不报(>1000才报)", "expected_types": [], "text": "患者，女，54岁。诊断：2型糖尿病。医嘱：二甲双胍 1000mg 每日一次。"},
+    {"id": "M1", "title": "missing: 无年龄", "expected_types": ["missing_info"], "text": "患者，男，主诉头痛。诊断：高血压病。医嘱：硝苯地平 30mg 每日一次。"},
+    {"id": "M2", "title": "missing: 无诊断", "expected_types": ["missing_info"], "text": "患者，男，52岁，主诉乏力不适数日，门诊观察中。医嘱：阿莫西林 500mg 每日三次。"},
+    {"id": "M3", "title": "missing: 药品无剂量", "expected_types": ["missing_info"], "text": "患者，女，45岁，主诉乏力。诊断：高血压病。医嘱：硝苯地平。"},
+    {"id": "M4", "title": "missing: 无年龄(女糖尿病)", "expected_types": ["missing_info"], "text": "患者，女，主诉口渴。诊断：2型糖尿病。医嘱：二甲双胍 500mg 每日三次。"},
+    {"id": "M5", "title": "missing: 无诊断+无剂量", "expected_types": ["missing_info"], "text": "患者，女，50岁，主诉乏力、食欲差。医嘱：未知口服药。"},
+    {"id": "M6", "title": "missing+gender: 女 + 前列腺增生 + 无年龄", "expected_types": ["missing_info", "gender_mismatch"], "text": "患者，女，主诉夜尿多。诊断：前列腺增生。医嘱：二甲双胍 500mg 每日三次。"}
+  ]
+}
