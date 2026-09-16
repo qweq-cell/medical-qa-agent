@@ -11,12 +11,12 @@
 ## ✨ 特性
 
 - **多模态输入**：文本病历 + 图片病历（PaddleOCR 识别）
-- **医疗实体识别**：`bert-base-chinese` 微调 NER（F1 0.66~0.77）+ 词典匹配兜底，识别疾病/症状/药品/检查等 9 类实体
+- **医疗实体识别**：**线上**采用词典匹配（前缀树 + 最大前向匹配）+ 实体链接，识别疾病/症状/药品/检查等 9 类实体；**离线**另训有 `bert-base-chinese` 微调 NER 模型（实体级验证集最佳 F1 0.69），作为后续双路融合方案
 - **知识图谱增强（RAG）**：Neo4j 本地知识图谱（4.4 万节点/28 万关系），实体链接 + 图谱检索增强 LLM 生成
 - **向量检索 RAG**：BGE embedding + chunk 切分 + 余弦相似度检索 + LLM 生成（完整检索增强生成链路）
-- **LLM Agent 深度质控**：DeepSeek API 驱动，发现规则引擎无法识别的临床逻辑问题（症状-性别矛盾、用药-诊断不匹配等）
+- **LLM 深度质控**：DeepSeek API 驱动，发现规则引擎无法识别的临床逻辑问题（症状-性别矛盾、用药-诊断不匹配等）
 - **规则引擎兜底**：性别矛盾/剂量异常/症状匹配/信息完整性四级检测，服务异常自动降级不崩溃
-- **工程化交付**：FastAPI + Streamlit + Docker，接口实测 246ms 响应
+- **工程化交付**：FastAPI + Streamlit + Docker；接口实测 246ms 返回完整报告（含 Neo4j 图谱查询往返），纯规则链路实测 0.3ms
 - **质控规则评测集**：25 例带已知答案的评测集（18 例含植入问题、共 21 个问题实例 + 7 例干净对照组），输出检出率 / 误报率 / 完全正确数 / 延迟基线；当前 rule-only 模式下检出率 100%、误报 0、对照组 0 误报
 - **MCP Server**：基于 MCP 协议把整体质控能力封装为可调用工具（stdio transport），打通 Agent 与病历 / 知识库数据源；Neo4j 不可达自动降级，任意环境可跑
 
@@ -26,20 +26,20 @@
 
 ```
 病历文本 / 图片(OCR)
-  → ① NER 实体识别（BERT 模型 + 词典匹配 + 实体链接）
+  → ① NER 实体识别（词典匹配 + 实体链接）
   → ② 知识图谱查询（Neo4j：症状/药品/检查/并发症）
-  → ③ LLM Agent 深度质控（DeepSeek）
+  → ③ LLM 深度质控（DeepSeek）
   → ④ 规则引擎兜底（性别/剂量/完整性）
   → ⑤ 质控报告生成（Markdown / 自然语言）
 ```
 
 | 模块 | 技术 |
 |------|------|
-| NER | bert-base-chinese + HuggingFace Token Classification |
-| 实体链接 | 别名映射 + 模糊匹配 |
+| NER | **线上**：词典匹配（前缀树 + 最大前向匹配）+ 实体链接；**离线**：`bert-base-chinese` 微调（HuggingFace Token Classification，实体级 F1 0.69） |
+| 实体链接 | 别名映射 + 包含匹配 |
 | 知识图谱 | Neo4j + Cypher（4.4 万节点 / 28 万关系） |
 | RAG | BGE embedding + 向量检索 + 知识图谱增强 |
-| LLM Agent | DeepSeek API（OpenAI 兼容格式）+ Agent 编排 |
+| LLM 应用 | DeepSeek API（OpenAI 兼容格式）+ 工具化编排（工具接口 + 顺序调度 + 降级） |
 | OCR | PaddleOCR |
 | 后端 | FastAPI |
 | 前端 | Streamlit |
@@ -87,7 +87,7 @@ pip install -r requirements.txt
 
    > 未放置该文件也能正常演示：系统自动降级为「无 KG 模式」，词典 NER + 规则质控完整可用。
 
-2. （可选）LLM Agent 深度质控：复制 `.env.example` 为 `.env` 并填入 DeepSeek API Key：
+2. （可选）LLM 深度质控：复制 `.env.example` 为 `.env` 并填入 DeepSeek API Key：
 
    ```
    LLM_API_KEY=sk-xxx
@@ -106,6 +106,14 @@ streamlit run src/ui/app.py                 # 前端 (8501)
 
 浏览器访问 `http://localhost:8501`，输入病历文本或上传图片，点击「分析」。
 
+### 评测
+
+```bash
+# 跑 25 例质控规则评测集，输出 recall / 误报率 / 延迟分位数
+python eval/run_eval.py            # 写 eval/report.md
+python eval/run_eval.py --json     # 仅打印 JSON 汇总
+```
+
 ### API
 
 | 接口 | 说明 |
@@ -120,12 +128,12 @@ streamlit run src/ui/app.py                 # 前端 (8501)
 
 ```
 src/
-├── ner/        # 实体识别（BERT 模型 + 词典匹配 + 实体链接）
+├── ner/        # 实体识别（词典匹配 + 实体链接）
 ├── kg/         # 知识图谱（Neo4j 连接 + Cypher 查询）
-├── llm/        # LLM Agent（DeepSeek 客户端 + 结构化抽取 + 质控报告）
+├── llm/        # LLM 应用（DeepSeek 客户端 + 结构化抽取 + 质控报告）
 ├── ocr/        # 图片识别（PaddleOCR）
 ├── qc/         # 质控规则引擎 + 报告生成
-├── agent/      # Agent 调度器（ReAct 模式 + 工具调用）
+├── agent/      # 编排层（工具化接口 + 顺序调度 + 降级）
 ├── api/        # FastAPI 路由
 ├── ui/         # Streamlit 前端
 ├── models/     # 数据模型（Pydantic）
@@ -141,9 +149,9 @@ mcp-server/     # MCP Server（stdio，把质控能力暴露为 MCP 工具）
 
 ## 📊 项目里程碑
 
-- ✅ 医疗 NER 模型训练（bert-base-chinese 微调，F1 0.66~0.77）
+- ✅ 医疗 NER 模型**离线训练**（bert-base-chinese 微调，CMeEE-V2 全量 1.5 万条，5 epoch，实体级验证集最佳 F1 0.69）
 - ✅ 本地知识图谱构建（44K 节点 / 280K 关系）
-- ✅ LLM Agent 接入（DeepSeek，规则兜底 + 自动降级）
+- ✅ LLM 接入（DeepSeek，规则兜底 + 自动降级）
 - ✅ OCR 图片识别 + 向量检索 RAG
 - ✅ FastAPI + Streamlit + Docker 全链路 Demo
 - ✅ 质控规则评测集（25 例 + 对照组 + 自动化 runner，输出 recall / 误报率 / 延迟基线）
