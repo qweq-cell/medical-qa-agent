@@ -68,6 +68,21 @@ class KGQueries:
         )
         return results
 
+    def drug_exists(self, drug_name: str) -> bool:
+        """图谱中是否存在该药品节点。
+
+        为什么需要它：get_drug_diseases() 在「药不在图谱里」和「药在图谱里但没记录
+        适应症」两种情况下都返回空列表。对质控场景来说两者语义完全不同 ——
+        前者是「无法判断」，只有后者才可能是「用药与诊断不符」。
+        不区分就会给正确处方报假警（例如图谱只收商品名「盐酸二甲双胍片」，
+        通用名「二甲双胍」查不到，却被判成「与诊断不符」）。
+        """
+        results = self.conn.query(
+            "MATCH (dr:Drug {name: $name}) RETURN count(dr) as cnt",
+            {"name": drug_name}
+        )
+        return bool(results and results[0].get("cnt", 0) > 0)
+
     # ---- 检查相关 ----
 
     def get_diseases_by_symptom(self, symptom_name: str) -> list[str]:
@@ -77,6 +92,14 @@ class KGQueries:
             {"name": symptom_name}
         )
         return [r["d.name"] for r in results]
+
+    def symptom_exists(self, symptom_name: str) -> bool:
+        """图谱中是否存在该症状节点（用于区分「未收录」与「收录但无关联疾病」）"""
+        results = self.conn.query(
+            "MATCH (s:Symptom {name: $name}) RETURN count(s) as cnt",
+            {"name": symptom_name}
+        )
+        return bool(results and results[0].get("cnt", 0) > 0)
 
     # ---- 统计 ----
 

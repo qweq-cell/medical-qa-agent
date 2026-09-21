@@ -188,12 +188,26 @@ class AgentTools:
                     "symptom": symptom}
         try:
             diseases = self.kg.get_diseases_by_symptom(symptom) or []
-            return {
+            result = {
                 "available": True,
                 "symptom": symptom,
                 "possible_diseases": diseases[:30],  # 截断，避免 token 爆炸
                 "count": len(diseases),
             }
+            if not diseases:
+                # 「0 条」有两种原因，语义完全不同：
+                #   图谱根本没这个症状名（多为词典用词 ≠ 图谱用词）→ 无法反查
+                #   图谱有这个症状但没关联疾病                        → 确实无关联
+                # 不说清，模型会误判成「没有任何疾病有这个症状」。
+                in_kg = self.kg.symptom_exists(symptom)
+                result["symptom_in_kg"] = in_kg
+                result["conclusion"] = (
+                    f"图谱收录了症状「{symptom}」，但未关联任何疾病"
+                    if in_kg else
+                    f"图谱未收录症状「{symptom}」（多为实体词典用词与图谱用词不一致），"
+                    "无法据此反查疾病；可换用图谱标准症状名重试，不要据此判断「该症状无对应疾病」"
+                )
+            return result
         except Exception as e:
             return {"available": False, "reason": f"图谱查询异常: {e}", "symptom": symptom}
 
@@ -219,6 +233,11 @@ class AgentTools:
 
         有独立决策价值：规则引擎只能判断「药存在、诊断存在」，
         不理解两者之间的药理学关系；模型主动调用本工具后，判断就有图谱依据了。
+
+        ⚠️ 必须把三种情形分开说，否则会给正确处方报假警：
+          · 药不在图谱里（多为通用名 vs 商品名/剂型名差异）→ unknown，不代表用药有误
+          · 药在图谱里但没记录适应症                        → unknown，无法判断
+          · 药在图谱里有适应症、但不含该诊断                → inconsistent，才是真值得提示的
         """
         if not self.kg:
             return {"available": False, "reason": "知识图谱不可达（当前为无 KG 模式）",
@@ -227,18 +246,37 @@ class AgentTools:
             rows = self.kg.get_drug_diseases(drug) or []
             indicated = [r.get("disease") for r in rows if r.get("disease")]
             consistent = disease in indicated
+
+            if consistent:
+                verdict = "consistent"
+                conclusion = f"图谱显示 {drug} 可用于治疗 {disease}"
+            elif indicated:
+                verdict = "inconsistent"
+                conclusion = (
+                    f"图谱显示 {drug} 的适应症不包含 {disease}"
+                    f"（该药在图谱中对应 {len(indicated)} 个疾病），建议核实用药与诊断是否相符"
+                )
+            elif self.kg.drug_exists(drug):
+                verdict = "unknown"
+                conclusion = (
+                    f"图谱收录了 {drug}，但未记录其适应症，无法判断与 {disease} 是否一致"
+                )
+            else:
+                verdict = "unknown"
+                conclusion = (
+                    f"图谱未收录药品「{drug}」，无法判断与 {disease} 是否一致"
+                    "（常见原因是通用名与图谱中的商品名/剂型名不一致，不代表用药有误，勿据此报质控问题）"
+                )
+
             return {
                 "available": True,
                 "drug": drug,
                 "disease": disease,
+                "verdict": verdict,
                 "consistent": consistent,
                 "indicated_diseases": indicated[:30],
                 "indicated_count": len(indicated),
-                "conclusion": (
-                    f"图谱显示 {drug} 可用于治疗 {disease}"
-                    if consistent else
-                    f"图谱未显示 {drug} 用于治疗 {disease}，建议核实用药与诊断是否相符"
-                ),
+                "conclusion": conclusion,
             }
         except Exception as e:
             return {"available": False, "reason": f"图谱查询异常: {e}",
