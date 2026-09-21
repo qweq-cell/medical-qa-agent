@@ -28,6 +28,15 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
 LLM_ENABLED = bool(LLM_API_KEY and LLM_API_KEY.startswith("sk-"))
 
+# 管线模式（P2 开关）
+#   fixed = 确定性管线（默认）。流程可复现、可审计，25 例评测集覆盖的就是它。
+#   agent = ReAct 自主规划，模型自己决定「调哪个工具、调几次、什么时候停」；
+#           异常 / 超步数自动回退 fixed，保证任何情况下都有结果产出。
+# 医疗质控要求判定依据可复现，所以默认 fixed，agent 作为可选增强。
+PIPELINE_MODE = os.getenv("PIPELINE_MODE", "fixed").strip().lower()
+if PIPELINE_MODE not in ("fixed", "agent"):
+    PIPELINE_MODE = "fixed"   # 非法值一律退回 fixed，不因一个拼写错误让服务起不来
+
 # 性别相关关键词
 MALE_KEYWORDS = ["男", "男性", "先生"]
 FEMALE_KEYWORDS = ["女", "女性", "女士"]

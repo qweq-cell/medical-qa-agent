@@ -49,6 +49,9 @@ data/processed/*
 resume*.md
 resume*.pdf
 resume*.docx
+cv*.pdf
+cv*.docx
+cv*.md
 docs/
 knowledge-base/
 scripts/resume_ai_app.json

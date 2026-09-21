@@ -49,6 +49,10 @@ class QCReport(BaseModel):
     summary: QCSummary = Field(default_factory=QCSummary)
     llm_enabled: bool = Field(False, description="是否启用 LLM Agent 模式")
     llm_report: Optional[str] = Field(None, description="LLM 生成的自然语言质控报告")
+    pipeline_mode: str = Field(
+        "fixed",
+        description="实际生效的管线：fixed（确定性）/ agent（ReAct 自主规划）/ agent_fallback（回退）",
+    )
 
     class Config:
         json_schema_extra = {

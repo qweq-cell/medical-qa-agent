@@ -194,19 +194,38 @@ class AgentTools:
                 "possible_diseases": diseases[:30],  # 截断，避免 token 爆炸
                 "count": len(diseases),
             }
-            if not diseases:
-                # 「0 条」有两种原因，语义完全不同：
-                #   图谱根本没这个症状名（多为词典用词 ≠ 图谱用词）→ 无法反查
-                #   图谱有这个症状但没关联疾病                        → 确实无关联
-                # 不说清，模型会误判成「没有任何疾病有这个症状」。
-                in_kg = self.kg.symptom_exists(symptom)
-                result["symptom_in_kg"] = in_kg
-                result["conclusion"] = (
-                    f"图谱收录了症状「{symptom}」，但未关联任何疾病"
-                    if in_kg else
-                    f"图谱未收录症状「{symptom}」（多为实体词典用词与图谱用词不一致），"
-                    "无法据此反查疾病；可换用图谱标准症状名重试，不要据此判断「该症状无对应疾病」"
-                )
+            if diseases:
+                result["match_type"] = "exact"
+                return result
+
+            # 精确 0 命中 -> 方案 2：名称回退匹配。
+            # 实体词典用词与图谱用词经常不一致（词典「口渴多饮」 vs 图谱「烦渴多饮 / 口渴」），
+            # 不回退就会把「用词不同」误判成「没有疾病有这个症状」。
+            for candidate in self.kg.find_symptom_names(symptom):
+                cand_diseases = self.kg.get_diseases_by_symptom(candidate) or []
+                if cand_diseases:
+                    result.update({
+                        "match_type": "fuzzy",
+                        "matched_symptom": candidate,
+                        "possible_diseases": cand_diseases[:30],
+                        "count": len(cand_diseases),
+                        "conclusion": (
+                            f"「{symptom}」在图谱中未精确收录，已按最接近的标准症状"
+                            f"「{candidate}」反查，得到 {len(cand_diseases)} 个可能疾病"
+                        ),
+                    })
+                    return result
+
+            # 回退也没命中：明确是「图谱没有这个症状」，不是「该症状无对应疾病」
+            in_kg = self.kg.symptom_exists(symptom)
+            result["match_type"] = "none"
+            result["symptom_in_kg"] = in_kg
+            result["conclusion"] = (
+                f"图谱收录了症状「{symptom}」，但未关联任何疾病（模糊匹配亦无结果）"
+                if in_kg else
+                f"图谱未收录症状「{symptom}」，模糊匹配也未找到相近症状，无法据此反查疾病；"
+                "不要据此判断「该症状无对应疾病」"
+            )
             return result
         except Exception as e:
             return {"available": False, "reason": f"图谱查询异常: {e}", "symptom": symptom}
@@ -245,15 +264,47 @@ class AgentTools:
         try:
             rows = self.kg.get_drug_diseases(drug) or []
             indicated = [r.get("disease") for r in rows if r.get("disease")]
+            matched_drug = drug if indicated else None
+            match_type = "exact"
+
+            # 方案 2：精确查不到适应症 -> 名称回退匹配。
+            # 图谱多为商品名/剂型名（盐酸二甲双胍片…），实体词典给的是通用名（二甲双胍），
+            # 不回退就会把「用词不同」误判成「用药与诊断不符」，给正确处方报假警。
+            if not indicated:
+                hits: list[tuple[str, list]] = []   # 适应症含该诊断的候选
+                fallback = None                      # 有适应症但不含该诊断的候选（备选展示）
+                for candidate in self.kg.find_drug_names(drug):
+                    cand_diseases = [
+                        r.get("disease")
+                        for r in (self.kg.get_drug_diseases(candidate) or [])
+                        if r.get("disease")
+                    ]
+                    if not cand_diseases:
+                        continue
+                    if fallback is None:
+                        fallback = (candidate, cand_diseases)
+                    if disease in cand_diseases:
+                        hits.append((candidate, cand_diseases))
+
+                if hits:
+                    # 命中多个候选时，取名字与查询最接近（长度差最小）的那个作代表 ——
+                    # 否则「二甲双胍」会被复方药「二甲双胍格列本脲片(Ⅰ)」代表，
+                    # 单方药「盐酸二甲双胍片」才是更准确的展示。
+                    candidate, cand_diseases = min(hits, key=lambda h: len(h[0]))
+                    matched_drug, indicated, match_type = candidate, cand_diseases, "fuzzy"
+                elif fallback is not None:
+                    matched_drug, indicated, match_type = fallback[0], fallback[1], "fuzzy"
+
             consistent = disease in indicated
+            drug_label = drug if match_type == "exact" else f"{drug}（匹配到「{matched_drug}」）"
 
             if consistent:
                 verdict = "consistent"
-                conclusion = f"图谱显示 {drug} 可用于治疗 {disease}"
+                conclusion = f"图谱显示 {drug_label} 可用于治疗 {disease}"
             elif indicated:
                 verdict = "inconsistent"
                 conclusion = (
-                    f"图谱显示 {drug} 的适应症不包含 {disease}"
+                    f"图谱显示 {drug_label} 的适应症不包含 {disease}"
                     f"（该药在图谱中对应 {len(indicated)} 个疾病），建议核实用药与诊断是否相符"
                 )
             elif self.kg.drug_exists(drug):
@@ -264,7 +315,8 @@ class AgentTools:
             else:
                 verdict = "unknown"
                 conclusion = (
-                    f"图谱未收录药品「{drug}」，无法判断与 {disease} 是否一致"
+                    f"图谱未收录药品「{drug}」，按名称模糊匹配也未找到可用适应症，"
+                    f"无法判断与 {disease} 是否一致"
                     "（常见原因是通用名与图谱中的商品名/剂型名不一致，不代表用药有误，勿据此报质控问题）"
                 )
 
@@ -274,6 +326,8 @@ class AgentTools:
                 "disease": disease,
                 "verdict": verdict,
                 "consistent": consistent,
+                "match_type": match_type,
+                "matched_drug": matched_drug,
                 "indicated_diseases": indicated[:30],
                 "indicated_count": len(indicated),
                 "conclusion": conclusion,

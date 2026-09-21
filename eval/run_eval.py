@@ -26,20 +26,30 @@ from src.ner.dict_matcher import DictMatcher                      # noqa: E402
 from src.ner.entity_linking import EntityLinker                   # noqa: E402
 from src.qc.rules import QCRules                                  # noqa: E402
 from src.agent.tools import AgentTools                            # noqa: E402
-from src.agent.orchestrator import MedGuardianAgent               # noqa: E402
+from src.agent.pipeline import MedicalPipeline                    # noqa: E402
 
 
-def build_agent():
+def build_agent(mode: str = "fixed"):
+    """构造统一入口（P2 起 API/UI/MCP/评测共用同一个入口）。
+
+    kg=None / llm=None：评测集只测确定性规则链路，默认走 fixed 分支，
+    因此结果可以用精确期望值比对；agent 分支非确定性，不适用本评测口径。
+    """
     matcher = DictMatcher(ENTITY_DICT_FILE, extra_entities=EXTRA_ENTITIES)
     linker = EntityLinker(ENTITY_DICT_FILE)
     tools = AgentTools(matcher=matcher, linker=linker, kg=None, rules=QCRules())
-    return MedGuardianAgent(tools, llm=None)
+    return MedicalPipeline(tools, llm=None, mode=mode)
 
 
 def main():
     data = json.loads((ROOT / "eval" / "cases.json").read_text(encoding="utf-8"))
     cases = data["cases"]
-    agent = build_agent()
+    mode = "fixed"
+    if "--mode" in sys.argv:
+        idx = sys.argv.index("--mode")
+        if idx + 1 < len(sys.argv):
+            mode = sys.argv[idx + 1]
+    agent = build_agent(mode)
 
     rows = []
     per_type = {}          # type -> {"exp":0, "hit":0}
@@ -84,6 +94,7 @@ def main():
 
     agg = {
         "cases": len(cases),
+        "pipeline_mode": getattr(agent, "mode", mode),
         "expected_instances": total_exp,
         "detected_instances": total_hit,
         "recall": round(recall, 3),
@@ -111,7 +122,7 @@ def main():
         "# MedGuardian 规则质控评测报告",
         "",
         f"- 数据集：`eval/cases.json`（{len(cases)} 例，合成埋点，见文件 meta）",
-        f"- 模式：rule-only（无 Neo4j / 无 LLM）｜ 日期：{data['meta'].get('date','')}",
+        f"- 模式：rule-only（无 Neo4j / 无 LLM）｜ 管线：{getattr(agent, 'mode', mode)} ｜ 日期：{data['meta'].get('date','')}",
         "",
         "## 汇总",
         "",

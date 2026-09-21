@@ -69,7 +69,7 @@ def _build_agent():
     from src.ner.entity_linking import EntityLinker
     from src.qc.rules import QCRules
     from src.agent.tools import AgentTools
-    from src.agent.orchestrator import MedGuardianAgent
+    from src.agent.pipeline import MedicalPipeline
     from src.llm.client import LLMClient
 
     matcher = DictMatcher(ENTITY_DICT_FILE, extra_entities=EXTRA_ENTITIES)
@@ -87,7 +87,7 @@ def _build_agent():
 
     llm = LLMClient() if LLM_ENABLED else None
     tools = AgentTools(matcher=matcher, linker=linker, kg=kg, rules=QCRules())
-    return MedGuardianAgent(tools, llm=llm)
+    return MedicalPipeline(tools, llm=llm)
 
 
 def _get_agent():

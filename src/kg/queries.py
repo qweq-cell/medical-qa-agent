@@ -83,6 +83,24 @@ class KGQueries:
         )
         return bool(results and results[0].get("cnt", 0) > 0)
 
+    def find_drug_names(self, keyword: str, limit: int = 20) -> list[str]:
+        """按关键词模糊匹配药品名 —— 方案 2 的名称回退。
+
+        为什么需要：图谱里的药品名多为商品名/剂型名（盐酸二甲双胍片、二甲双胍格列本脲片(Ⅰ)…），
+        而实体词典给的是通用名（二甲双胍），精确匹配必然落空。
+        双向包含（节点名含关键词 / 关键词含节点名）+ 按名字长度降序 —— 名字越长匹配越具体。
+        """
+        if not keyword:
+            return []
+        results = self.conn.query(
+            """MATCH (dr:Drug)
+               WHERE dr.name CONTAINS $kw OR $kw CONTAINS dr.name
+               RETURN dr.name AS name""",
+            {"kw": keyword}
+        )
+        names = [r["name"] for r in results if r.get("name")]
+        return sorted(set(names), key=len, reverse=True)[:limit]
+
     # ---- 检查相关 ----
 
     def get_diseases_by_symptom(self, symptom_name: str) -> list[str]:
@@ -100,6 +118,25 @@ class KGQueries:
             {"name": symptom_name}
         )
         return bool(results and results[0].get("cnt", 0) > 0)
+
+    def find_symptom_names(self, keyword: str, limit: int = 20) -> list[str]:
+        """按关键词模糊匹配症状名 —— 方案 2 的名称回退。
+
+        为什么需要：实体词典用词与图谱用词经常不一致
+        （词典「口渴多饮」 vs 图谱「烦渴多饮 / 口渴 / 经常口渴」），精确匹配会 0 命中。
+        双向包含 + 按名字长度降序；并过滤掉长度 < 2 的节点名，避免「渴」这类短词引入噪声。
+        """
+        if not keyword:
+            return []
+        results = self.conn.query(
+            """MATCH (s:Symptom)
+               WHERE s.name CONTAINS $kw OR $kw CONTAINS s.name
+               RETURN s.name AS name""",
+            {"kw": keyword}
+        )
+        names = [r["name"] for r in results if r.get("name")]
+        names = [n for n in names if len(n) >= 2]
+        return sorted(set(names), key=len, reverse=True)[:limit]
 
     # ---- 统计 ----
 

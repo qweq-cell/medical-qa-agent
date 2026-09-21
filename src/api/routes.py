@@ -6,14 +6,14 @@ import tempfile
 import time
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
-from src.agent.orchestrator import MedGuardianAgent
+from src.agent.pipeline import MedicalPipeline
 from src.models.schemas import QCReport
 from src.ocr.ocr_engine import OCREngine
 
 router = APIRouter(prefix="/api", tags=["medguardian"])
 
-# 全局 Agent 实例（由 main.py 注入）
-agent: MedGuardianAgent = None
+# 全局 Agent 实例（由 main.py 注入；P2 起为 MedicalPipeline，按 PIPELINE_MODE 决定管线）
+agent: MedicalPipeline = None
 _ocr = OCREngine()
 
 

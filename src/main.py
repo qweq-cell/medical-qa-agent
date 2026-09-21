@@ -16,7 +16,7 @@ from src.kg.connector import KGConnector
 from src.kg.queries import KGQueries
 from src.qc.rules import QCRules
 from src.agent.tools import AgentTools
-from src.agent.orchestrator import MedGuardianAgent
+from src.agent.pipeline import MedicalPipeline
 from src.llm.client import LLMClient
 from src.api.routes import router, agent as api_agent
 
@@ -87,7 +87,8 @@ def init_agent():
         print(f"  [OK] LLM Agent 已启用: {llm.model} ({llm.base_url})")
     else:
         print("  [WARN] 未配置 LLM API Key → 纯规则模式（在项目根 .env 填写 LLM_API_KEY 可启用）")
-    agent = MedGuardianAgent(tools, llm=llm)
+    agent = MedicalPipeline(tools, llm=llm)
+    print(f"  [OK] 管线模式: {agent.mode}（PIPELINE_MODE=fixed|agent 可切换，默认 fixed）")
 
     print("\n" + "=" * 50)
     print("  [OK] MedGuardian Agent 就绪！")
