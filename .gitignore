@@ -54,7 +54,7 @@ cv*.docx
 cv*.md
 docs/
 knowledge-base/
-scripts/resume*.json
+scripts/resume*
 scripts/build_company_list.py
 
 # 与项目无关的本地工具/脚本
