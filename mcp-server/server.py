@@ -28,8 +28,32 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
-mcp = FastMCP("MedGuardian")
+# MCP SDK 默认开启 DNS 重绑定保护，且 allowed_hosts / allowed_origins 为空
+# → 只放行 localhost / 127.0.0.1。容器内的客户端（如 Dify）会被拒，分三层报错：
+#   ① Host 头不匹配 → HTTP 421 Misdirected Request + "Invalid Host header"
+#   ② Origin 头不匹配 → HTTP 403 Forbidden
+#   ③ Host 头被去掉端口 → 仍然 421（容易漏，见下）
+# Dify 的 MCP 请求经其 SSRF 代理（SSRF_PROXY_ALL_URL）发出，
+# 代理转发时会改写请求头：Origin 变成不带端口的 "http://host.docker.internal"，
+# Host 也可能变成不带端口的 "host.docker.internal"。
+# 因此 allowed_hosts 和 allowed_origins 都必须同时覆盖「带端口」和「不带端口」两种形式。
+_ALIASES = ["127.0.0.1", "localhost", "host.docker.internal"]
+_ALLOWED_HOSTS = [f"{a}:*" for a in _ALIASES] + list(_ALIASES)
+_ALLOWED_ORIGINS = [f"{scheme}://{a}{suffix}"
+                    for a in _ALIASES
+                    for scheme in ("http", "https")
+                    for suffix in ("", ":*")]
+
+mcp = FastMCP(
+    "MedGuardian",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_ALLOWED_HOSTS,
+        allowed_origins=_ALLOWED_ORIGINS,
+    ),
+)
 
 _agent = None
 
@@ -98,8 +122,25 @@ def _selftest():
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true", help="直接自测一个病历（不启动 MCP）")
+    ap.add_argument(
+        "--transport",
+        default="stdio",
+        choices=["stdio", "sse", "streamable-http"],
+        help="stdio=本地客户端（Claude Desktop/Cursor）；sse / streamable-http=网络可达（Dify 等容器内客户端）",
+    )
+    ap.add_argument("--host", default="0.0.0.0", help="网络传输时的监听地址")
+    ap.add_argument("--port", type=int, default=8931, help="网络传输时的监听端口")
     args = ap.parse_args()
+
     if args.selftest:
         _selftest()
+    elif args.transport == "stdio":
+        mcp.run()  # 默认行为不变：本地 stdio
     else:
-        mcp.run()
+        # ⚠️ 必须监听 0.0.0.0：默认是 127.0.0.1，Docker 容器访问不到宿主机
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        path = mcp.settings.sse_path if args.transport == "sse" else mcp.settings.streamable_http_path
+        print(f"[MCP] transport={args.transport}  监听 http://{args.host}:{args.port}{path}", flush=True)
+        print(f"[MCP] Dify 里填：http://host.docker.internal:{args.port}{path}", flush=True)
+        mcp.run(transport=args.transport)

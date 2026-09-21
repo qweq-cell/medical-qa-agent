@@ -75,3 +75,6 @@ docker-compose.override.yml
 # Logs
 *.log
 logs/
+
+# 内部实施计划文档（不上传 GitHub）
+P1-工具扩展代码.md
